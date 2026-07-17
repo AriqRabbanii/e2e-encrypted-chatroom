@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Chat Room - E2E Encrypted Chat</title>
+
+    <!-- Google Fonts: Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet">
+
+    <!-- Socket.IO & CryptoJS CDNs -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        wa: {
+                            bg: '#0b141a',
+                            panel: '#111b21',
+                            header: '#202c33',
+                            active: '#2a3942',
+                            green: '#00a884',
+                            greenHover: '#00c298',
+                            greenDark: '#005c4b',
+                            incoming: '#202c33',
+                            outgoing: '#005c4b',
+                            textMain: '#e9edef',
+                            textSub: '#8696a0',
+                            inputBg: '#2a3942',
+                            redDark: '#3b1d24',
+                            redText: '#f87171'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        outfit: ['Outfit', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #374248;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4f5d64;
+        }
+
+        /* WhatsApp-like background pattern */
+        .wa-chat-bg {
+            background-color: #0b141a;
+            background-image: radial-gradient(rgba(0, 168, 132, 0.05) 1px, transparent 0);
+            background-size: 24px 24px;
+        }
+
+        /* Gooey Cursor Background Animation */
+        .gooey-cursor-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none !important;
+            z-index: -10;
+            overflow: hidden;
+            filter: url('#gooey');
+        }
+
+        .gooey-blob {
+            position: absolute;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(0, 168, 132, 0.45), rgba(0, 194, 152, 0.25));
+            transform: translate3d(0, 0, 0);
+            will-change: transform;
+            pointer-events: none !important;
+        }
+    </style>
+</head>
+
+<body
+    class="text-wa-textMain min-h-screen flex items-center justify-center p-0 md:p-4 font-sans select-none antialiased">
+
+    <!-- Solid Dark Background Wrapper -->
+    <div class="fixed inset-0 bg-[#0b141a]" style="z-index: -20; pointer-events: none;"></div>
+
+    <!-- SVG Gooey Filter -->
+    <svg style="position: absolute; width: 0; height: 0; pointer-events: none; overflow: hidden;"
+        xmlns="http://www.w3.org/2000/svg" version="1.1">
+        <defs>
+            <filter id="gooey">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="15" result="blur" />
+                <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 25 -10"
+                    result="goo" />
+                <feComposite in="SourceGraphic" in2="goo" operator="atop" />
+            </filter>
+        </defs>
+    </svg>
+
+    <!-- Gooey Background Container -->
+    <div id="gooey-container" class="gooey-cursor-container"></div>
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen"
+        class="w-full max-w-[480px] bg-wa-panel border border-[#222e35] p-8 rounded-2xl shadow-2xl space-y-6 relative z-10 overflow-hidden transition-all duration-300">
+        <div class="absolute -top-16 -right-16 w-32 h-32 bg-wa-green/10 rounded-full blur-3xl pointer-events-none">
+        </div>
+
+
+
+        <div class="space-y-4 pt-2">
+            <!-- Username -->
+            <div class="space-y-1.5">
+                <label for="username"
+                    class="text-xs font-semibold text-wa-green uppercase tracking-wider">Username</label>
+                <input type="text" id="username" placeholder="Masukkan nama panggilan..."
+                    class="w-full px-4 py-3 bg-wa-inputBg border border-transparent focus:border-wa-green rounded-xl text-sm transition-all outline-none text-wa-textMain placeholder-wa-textSub">
+                <div class="flex flex-wrap gap-2 mt-1.5">
+                    <button type="button" onclick="presetUsername('Ariq')"
+                        class="px-3 py-1 bg-[#202c33] border border-[#2a3942] hover:border-wa-green text-wa-textMain rounded-lg text-xs font-medium transition-all">Ariq</button>
+                    <button type="button" onclick="presetUsername('Raisul')"
+                        class="px-3 py-1 bg-[#202c33] border border-[#2a3942] hover:border-wa-green text-wa-textMain rounded-lg text-xs font-medium transition-all">Raisul</button>
+                    <button type="button" onclick="presetUsername('Alfi')"
+                        class="px-3 py-1 bg-[#202c33] border border-[#2a3942] hover:border-wa-green text-wa-textMain rounded-lg text-xs font-medium transition-all">Alfi</button>
+                </div>
+            </div>
+
+            <!-- Shared Key -->
+            <div class="space-y-1.5">
+                <div class="flex items-center justify-between">
+                    <label for="secret-key" class="text-xs font-semibold text-wa-green uppercase tracking-wider">Kunci
+                        Enkripsi (Shared Key)</label>
+                    <span class="text-[10px] text-wa-textSub">(Kunci ini tidak dikirim ke server)</span>
+                </div>
+                <input type="password" id="secret-key" placeholder="Masukkan kunci rahasia..."
+                    class="w-full px-4 py-3 bg-wa-inputBg border border-transparent focus:border-wa-green rounded-xl text-sm transition-all outline-none text-wa-textMain placeholder-wa-textSub">
+                <div class="flex flex-wrap gap-2 mt-1.5">
+                    <button type="button" onclick="presetKey('kunci123')"
+                        class="px-3 py-1 bg-[#202c33] border border-[#2a3942] hover:border-wa-green text-emerald-400 rounded-lg text-xs font-medium transition-all">kunci123
+                        (Sama)</button>
+                    <button type="button" onclick="presetKey('salahkunci999')"
+                        class="px-3 py-1 bg-[#202c33] border border-[#2a3942] hover:border-wa-green text-rose-400 rounded-lg text-xs font-medium transition-all">salahkunci999
+                        (Berbeda)</button>
+                </div>
+            </div>
+
+            <div class="pt-4">
+                <button onclick="joinChat()"
+                    class="w-full py-3.5 px-4 bg-wa-green hover:bg-wa-greenHover text-wa-bg rounded-xl text-sm font-bold transition-all shadow-md shadow-wa-green/10 active:scale-[0.98]">
+                    Masuk ke Ruang Obrolan
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN CHATROOM INTERFACE (Hidden initially) -->
+    <div id="chat-screen"
+        class="hidden w-full max-w-[1000px] h-screen md:h-[650px] bg-wa-panel border border-[#222e35] md:rounded-2xl shadow-2xl flex overflow-hidden relative z-10">
+
+        <!-- SIDEBAR (Left Panel) -->
+        <aside class="hidden md:flex w-[320px] bg-[#111b21] border-r border-[#222e35] flex-col">
+            <!-- Sidebar Header -->
+            <div class="bg-[#202c33] h-[60px] px-4 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-full bg-wa-green/20 text-wa-green flex items-center justify-center font-bold font-outfit uppercase border border-wa-green/30"
+                        id="sidebar-avatar">
+                        U
+                    </div>
+                    <div class="truncate max-w-[150px]">
+                        <h3 class="font-bold text-sm text-wa-textMain truncate leading-tight" id="sidebar-username">
+                            Username</h3>
+                        <span class="text-[10px] text-wa-green font-medium">Online</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Security details Card -->
+            <div class="p-4 space-y-4 flex-1 overflow-y-auto">
+                <div class="bg-[#182229] border border-[#222e35] p-4 rounded-xl space-y-3">
+                    <div class="text-wa-green flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor" stroke-width="2.5">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                        <h4 class="text-xs font-bold uppercase tracking-wider">Keamanan E2E</h4>
+                    </div>
+                    <p class="text-xs text-wa-textSub leading-relaxed">
+                        Pesan Anda dienkripsi menggunakan algoritma <strong>AES-256</strong> langsung pada perangkat
+                        Anda sebelum dikirim. Server hanya menyebarkan teks terenkripsi (*ciphertext*) tanpa tahu
+                        isinya.
+                    </p>
+                </div>
+
+                <div class="bg-[#182229] border border-[#222e35] p-4 rounded-xl space-y-2">
+                    <span class="text-[10px] uppercase font-bold text-wa-textSub tracking-wider">Kunci Aktif Saat
+                        Ini</span>
+                    <div class="flex items-center justify-between bg-wa-bg border border-[#222e35] px-3 py-2 rounded-lg text-xs font-mono text-wa-green truncate"
+                        id="sidebar-key-display">
+                        Key
+                    </div>
+                    <span class="text-[9px] text-wa-textSub leading-relaxed block mt-1">
+                        Hanya klien dengan kunci yang sama persis yang dapat membaca obrolan ini.
+                    </span>
+                </div>
+            </div>
+
+            <!-- Sidebar Footer / Powered -->
+            <div class="p-4 border-t border-[#222e35] text-center">
+                <p class="text-[10px] text-wa-textSub">E2E WebSocket • Data Comm Project</p>
+            </div>
+        </aside>
+
+        <!-- MAIN PANEL (Right Panel) -->
+        <main class="flex-1 flex flex-col bg-wa-bg overflow-hidden relative">
+
+            <!-- Chat Header -->
+            <header
+                class="bg-[#202c33] h-[60px] px-4 md:px-6 flex items-center justify-between border-b border-[#222e35] z-10">
+                <div class="flex items-center gap-3">
+                    <div
+                        class="w-10 h-10 rounded-full bg-wa-green/10 text-wa-green border border-wa-green/30 flex items-center justify-center font-bold">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="font-bold text-sm text-wa-textMain">Grup Obrolan Terenkripsi</h2>
+                        <div class="flex items-center gap-1.5">
+                            <span class="w-2 h-2 rounded-full bg-wa-green animate-pulse"></span>
+                            <span class="text-[10px] text-wa-green font-medium">Aktif</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button onclick="leaveChat()"
+                        class="p-2 hover:bg-wa-active rounded-full text-wa-textSub hover:text-wa-textMain transition-all"
+                        title="Keluar">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5.5 h-5.5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor" stroke-width="2.5">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Chat Area (Scrollable Message List) -->
+            <div id="messages" class="flex-1 p-4 md:p-6 overflow-y-auto space-y-3 z-10 flex flex-col wa-chat-bg">
+                <!-- System and chat bubbles will render here -->
+            </div>
+
+            <!-- Input Footer -->
+            <footer class="bg-[#202c33] min-h-[60px] px-4 py-2 flex items-center gap-3 border-t border-[#222e35] z-10">
+                <div class="flex-1 relative flex items-center">
+                    <input type="text" id="message-input" placeholder="Ketik pesan rahasia..."
+                        onkeydown="handleKeyPress(event)"
+                        class="w-full px-4 py-2.5 bg-[#2a3942] focus:bg-[#2a3942] rounded-lg text-sm transition-all outline-none text-wa-textMain placeholder-wa-textSub border border-transparent focus:border-transparent">
+                </div>
+                <button onclick="sendMessage()"
+                    class="w-10 h-10 bg-wa-green hover:bg-wa-greenHover text-wa-bg rounded-full flex items-center justify-center transition-all active:scale-[0.93]">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 transform rotate-90 translate-x-[1px]"
+                        viewBox="0 0 20 20" fill="currentColor">
+                        <path
+                            d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                    </svg>
+                </button>
+            </footer>
+        </main>
+
+    </div>
+
+    <!-- SCRIPT -->
+    <script>
+        let socket = null;
+        let localUsername = "";
+        let encryptionKey = "";
+
+        /**
+         * Preset username when buttons are clicked.
+         */
+        function presetUsername(name) {
+            document.getElementById('username').value = name;
+        }
+
+        /**
+         * Preset secret key when buttons are clicked.
+         */
+        function presetKey(key) {
+            document.getElementById('secret-key').value = key;
+        }
+
+        /**
+         * Connect to WebSocket and join the chat room.
+         */
+        function joinChat() {
+            const usernameInput = document.getElementById('username').value.trim();
+            const keyInput = document.getElementById('secret-key').value;
+
+            if (!usernameInput) {
+                alert("Silakan isi nama panggilan Anda!");
+                return;
+            }
+            if (!keyInput) {
+                alert("Silakan isi kunci enkripsi!");
+                return;
+            }
+
+            localUsername = usernameInput;
+            encryptionKey = keyInput;
+
+            // Connect using standard host routing
+            socket = io();
+
+            socket.on('connect', () => {
+                console.log("Terhubung ke server WebSocket.");
+                // Emit join event with plaintext username
+                socket.emit('join', { username: localUsername });
+            });
+
+            socket.on('disconnect', () => {
+                console.log("Koneksi terputus dari server WebSocket.");
+            });
+
+            // Handle system broadcast messages
+            socket.on('system_message', (data) => {
+                appendSystemMessage(data.message);
+            });
+
+            // Handle incoming encrypted user messages
+            socket.on('receive_message', (data) => {
+                handleIncomingMessage(data);
+            });
+
+            // Update UI screens
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('chat-screen').classList.remove('hidden');
+
+            // Sidebar updates
+            document.getElementById('sidebar-username').textContent = localUsername;
+            document.getElementById('sidebar-avatar').textContent = localUsername.charAt(0);
+            document.getElementById('sidebar-key-display').textContent = encryptionKey;
+
+            document.getElementById('message-input').focus();
+
+            // Welcome system message
+            appendSystemMessage("Menghubungkan ke saluran aman E2E Chat Room dengan kunci aktif...");
+        }
+
+        /**
+         * Leave the chat and disconnect WebSocket connection.
+         */
+        function leaveChat() {
+            if (socket) {
+                socket.disconnect();
+            }
+            // Clear message list
+            document.getElementById('messages').innerHTML = "";
+
+            // Toggle UI screens
+            document.getElementById('chat-screen').classList.add('hidden');
+            document.getElementById('login-screen').classList.remove('hidden');
+        }
+
+        /**
+         * Handle keyboard events in the message input box.
+         */
+        function handleKeyPress(event) {
+            if (event.key === "Enter") {
+                sendMessage();
+            }
+        }
+
+        /**
+         * Encrypt and send message.
+         */
+        function sendMessage() {
+            const input = document.getElementById('message-input');
+            const plaintext = input.value.trim();
+
+            if (!plaintext) return;
+
+            // CLIENT-SIDE ENCRYPTION (E2E)
+            // Encrypt using AES algorithm with our shared key
+            const ciphertext = CryptoJS.AES.encrypt(plaintext, encryptionKey).toString();
+
+            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            // Emit E2E encrypted message to the server
+            socket.emit('send_message', {
+                username: localUsername,
+                ciphertext: ciphertext,
+                timestamp: timestamp
+            });
+
+            // Clear input field
+            input.value = "";
+        }        /**
+         * Append system text messages (non-encrypted) directly to UI.
+         */
+        function appendSystemMessage(msg) {
+            const container = document.getElementById('messages');
+            const msgEl = document.createElement('div');
+            msgEl.className = "self-center my-1.5 py-1 px-3 bg-[#182229] text-wa-textSub rounded-lg border border-[#222e35] text-[10px] max-w-[85%] text-center leading-normal";
+            msgEl.textContent = msg;
+            container.appendChild(msgEl);
+            scrollToBottom();
+        }
+
+        /**
+         * Receive and attempt to decrypt incoming E2E message.
+         */
+        function handleIncomingMessage(data) {
+            const sender = data.username;
+            const ciphertext = data.ciphertext;
+            const time = data.timestamp;
+
+            let decryptedText = "";
+            let decryptionSuccess = false;
+
+            // CLIENT-SIDE DECRYPTION (E2E)
+            try {
+                const bytes = CryptoJS.AES.decrypt(ciphertext, encryptionKey);
+                decryptedText = bytes.toString(CryptoJS.enc.Utf8);
+
+                // If output string is empty, key was incorrect
+                if (!decryptedText) {
+                    throw new Error("Decryption failed: Empty string returned");
+                }
+                decryptionSuccess = true;
+            } catch (error) {
+                // Decryption failure handling as required (e.g. key mismatch or packet corruption)
+                decryptedText = "[Encrypted unreadable message]";
+                decryptionSuccess = false;
+            }
+
+            appendUserMessage(sender, decryptedText, ciphertext, time, decryptionSuccess);
+        }
+
+        /**
+         * Append user message element with appropriate styling based on decrypt success.
+         */
+        function appendUserMessage(sender, text, rawCipher, time, isSuccess) {
+            const container = document.getElementById('messages');
+            const isSelf = (sender === localUsername);
+
+            const messageWrapper = document.createElement('div');
+            messageWrapper.className = `flex flex-col w-full ${isSelf ? 'items-end' : 'items-start'}`;
+
+            // Bubble body
+            const bubble = document.createElement('div');
+            bubble.style.position = "relative";
+
+            if (!isSuccess) {
+                // Decryption Failure UI (Red Alert styling)
+                bubble.className = `p-3.5 rounded-xl border text-[13px] shadow-sm max-w-[75%] leading-relaxed ${isSelf
+                        ? 'bg-wa-redDark border-[#ff0000]/25 text-wa-redText rounded-tr-none'
+                        : 'bg-wa-redDark border-[#ff0000]/20 text-wa-redText rounded-tl-none'
+                    }`;
+
+                // Show standard unreadable message label
+                const label = document.createElement('div');
+                label.className = "italic font-semibold text-xs flex items-center gap-1.5 mb-1.5";
+                label.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-rose-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M13.477 14.89A6 6 0 012 11.5a6 6 0 0110.89-3.477L14.707 6.293a1 1 0 011.414 1.414l-1.87 1.87a6 6 0 01-1.415 5.568l1.87 1.87a1 1 0 01-1.414 1.414l-1.87-1.87L13.477 14.89zM10 8a3 3 0 100 6 3 3 0 000-6z" clip-rule="evenodd" />
+                    </svg>
+                    <span>${text}</span>
+                `;
+                bubble.appendChild(label);
+
+                // Show raw ciphertext in small font to prove E2E broadcasting works
+                const cipherDisplay = document.createElement('div');
+                cipherDisplay.className = "font-mono text-[9px] break-all bg-wa-bg/60 p-2 rounded-lg text-wa-textSub border border-[#ff0000]/10";
+                cipherDisplay.textContent = `Raw Ciphertext: ${rawCipher}`;
+                bubble.appendChild(cipherDisplay);
+
+            } else {
+                // Success Decryption UI (WhatsApp Web Style)
+                bubble.className = `px-3 py-2 rounded-xl text-[14px] shadow-sm max-w-[75%] leading-relaxed ${isSelf
+                        ? 'bg-wa-outgoing text-wa-textMain rounded-tr-none'
+                        : 'bg-[#202c33] text-wa-textMain rounded-tl-none'
+                    }`;
+
+                // Sender tag (only for other users)
+                if (!isSelf) {
+                    const senderTag = document.createElement('div');
+                    senderTag.className = "text-[11px] font-bold text-wa-green mb-0.5";
+                    senderTag.textContent = sender;
+                    bubble.appendChild(senderTag);
+                }
+
+                const textNode = document.createElement('div');
+                textNode.className = "break-words whitespace-pre-wrap pb-1 pr-6";
+                textNode.textContent = text;
+                bubble.appendChild(textNode);
+            }
+
+            // Timestamp inside bubble
+            const timeContainer = document.createElement('span');
+            timeContainer.className = "absolute bottom-1 right-2 text-[9px] text-wa-textSub select-none flex items-center gap-1";
+
+            // Padlock or Warning status icon
+            const lockIcon = isSuccess
+                ? '<svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5 text-wa-green inline" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" /></svg>'
+                : '<svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5 text-rose-500 inline" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M13.477 14.89A6 6 0 012 11.5a6 6 0 0110.89-3.477L14.707 6.293a1 1 0 011.414 1.414l-1.87 1.87a6 6 0 01-1.415 5.568l1.87 1.87a1 1 0 01-1.414 1.414l-1.87-1.87L13.477 14.89z" clip-rule="evenodd" /></svg>';
+
+            timeContainer.innerHTML = `${time} ${lockIcon}`;
+            bubble.appendChild(timeContainer);
+
+            messageWrapper.appendChild(bubble);
+            container.appendChild(messageWrapper);
+            scrollToBottom();
+        }
+
+        /**
+         * Scroll container list to bottom.
+         */
+        function scrollToBottom() {
+            const container = document.getElementById('messages');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // GOOEY CURSOR ANIMATION
+        (function () {
+            const numBlobs = 6;
+            const blobs = [];
+            const blobData = [];
+
+            const container = document.getElementById('gooey-container');
+            if (!container) return;
+
+            // Generate trailing blobs with different sizes
+            for (let i = 0; i < numBlobs; i++) {
+                const el = document.createElement('div');
+                el.className = 'gooey-blob';
+                const size = 55 - (i * 7);
+                el.style.width = `${size}px`;
+                el.style.height = `${size}px`;
+                container.appendChild(el);
+                blobs.push(el);
+                blobData.push({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+            }
+
+            let mouseX = window.innerWidth / 2;
+            let mouseY = window.innerHeight / 2;
+
+            window.addEventListener('mousemove', (e) => {
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            });
+
+            window.addEventListener('touchmove', (e) => {
+                if (e.touches.length > 0) {
+                    mouseX = e.touches[0].clientX;
+                    mouseY = e.touches[0].clientY;
+                }
+            }, { passive: true });
+
+            function update() {
+                // Leader follows the mouse position
+                blobData[0].x += (mouseX - blobData[0].x) * 0.25;
+                blobData[0].y += (mouseY - blobData[0].y) * 0.25;
+
+                // Followers follow the preceding blob
+                for (let i = 1; i < numBlobs; i++) {
+                    const prev = blobData[i - 1];
+                    const curr = blobData[i];
+                    const speed = 0.12 + (i * 0.02);
+                    curr.x += (prev.x - curr.x) * speed;
+                    curr.y += (prev.y - curr.y) * speed;
+                }
+
+                // Render positions via 3D transform for hardware acceleration
+                for (let i = 0; i < numBlobs; i++) {
+                    blobs[i].style.transform = `translate3d(${blobData[i].x}px, ${blobData[i].y}px, 0) translate(-50%, -50%)`;
+                }
+
+                requestAnimationFrame(update);
+            }
+
+            requestAnimationFrame(update);
+        })();
+    </script>
+</body>
+
+</html>
